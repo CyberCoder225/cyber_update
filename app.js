@@ -1,25 +1,48 @@
+// app.js - Load Firebase config from environment variables
+
+// Firebase configuration from environment variables
+const firebaseConfig = {
+    apiKey: import.meta.env?.VITE_FIREBASE_API_KEY || process.env?.VITE_FIREBASE_API_KEY || "",
+    authDomain: import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN || process.env?.VITE_FIREBASE_AUTH_DOMAIN || "",
+    databaseURL: import.meta.env?.VITE_FIREBASE_DATABASE_URL || process.env?.VITE_FIREBASE_DATABASE_URL || "",
+    projectId: import.meta.env?.VITE_FIREBASE_PROJECT_ID || process.env?.VITE_FIREBASE_PROJECT_ID || "",
+    storageBucket: import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET || process.env?.VITE_FIREBASE_STORAGE_BUCKET || "",
+    messagingSenderId: import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+    appId: import.meta.env?.VITE_FIREBASE_APP_ID || process.env?.VITE_FIREBASE_APP_ID || ""
+};
+
+// Check if Firebase config is valid
+function isFirebaseConfigValid(config) {
+    return config.apiKey && 
+           config.projectId && 
+           config.databaseURL &&
+           config.apiKey !== "YOUR_API_KEY_HERE";
+}
+
 // Initialize Firebase
 let db;
-let storage;
 let siteConfig = {};
 let allApps = [];
 let allUpdates = [];
 
-// Initialize Firebase and load data
 async function initializeFirebase() {
     try {
+        // Check if config is valid
+        if (!isFirebaseConfigValid(firebaseConfig)) {
+            console.warn("Firebase config not found. Using demo mode.");
+            showDemoData();
+            return;
+        }
+
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
         db = firebase.database();
-        storage = firebase.storage();
         
         console.log("Firebase initialized successfully");
         
-        // Load site configuration
-        await loadSiteConfig();
-        
         // Load all data
         await Promise.all([
+            loadSiteConfig(),
             loadApps(),
             loadUpdates(),
             loadStats()
@@ -33,57 +56,48 @@ async function initializeFirebase() {
         
     } catch (error) {
         console.error("Firebase initialization failed:", error);
-        showError("Failed to connect to server. Please refresh the page.");
+        showDemoData();
     }
 }
 
-// Load site configuration from Firebase
+// Load site configuration
 async function loadSiteConfig() {
     try {
         const snapshot = await db.ref('website/config').once('value');
-        siteConfig = snapshot.val() || {};
-        
-        // Update page with config
+        siteConfig = snapshot.val() || getDefaultConfig();
         updatePageWithConfig();
-        
     } catch (error) {
-        console.error("Error loading site config:", error);
-        // Use defaults
-        siteConfig = {
-            title: "App Collection",
-            description: "All my apps in one place",
-            telegram: "https://t.me/yourchannel",
-            copyright: "© 2024 App Collection"
-        };
+        console.error("Error loading config:", error);
+        siteConfig = getDefaultConfig();
         updatePageWithConfig();
     }
 }
 
-// Update page with configuration
+function getDefaultConfig() {
+    return {
+        title: "App Collection",
+        description: "All my premium apps in one place",
+        heroTitle: "Welcome to <span class='highlight'>App Collection</span>",
+        telegram: "https://t.me/yourchannel",
+        copyright: "© 2024 App Collection"
+    };
+}
+
 function updatePageWithConfig() {
-    // Update title
-    document.title = siteConfig.title || "App Collection";
-    document.getElementById('siteTitle').textContent = siteConfig.title || "App Collection";
-    document.getElementById('heroTitle').innerHTML = siteConfig.heroTitle || 
-        `Welcome to <span class="highlight">${siteConfig.title || "App Collection"}</span>`;
+    document.title = siteConfig.title;
+    document.getElementById('siteTitle').textContent = siteConfig.title;
+    document.getElementById('heroTitle').innerHTML = siteConfig.heroTitle;
+    document.getElementById('heroSubtitle').textContent = siteConfig.description;
+    document.getElementById('copyrightText').textContent = siteConfig.copyright;
     
-    // Update description
-    document.getElementById('heroSubtitle').textContent = 
-        siteConfig.description || "All my apps in one place";
-    
-    // Update Telegram link
     const telegramLink = document.getElementById('telegramLink');
     if (siteConfig.telegram) {
         telegramLink.href = siteConfig.telegram;
         telegramLink.target = "_blank";
     }
-    
-    // Update copyright
-    document.getElementById('copyrightText').textContent = 
-        siteConfig.copyright || "© 2024 App Collection";
 }
 
-// Load all apps from Firebase
+// Load apps from Firebase
 async function loadApps() {
     try {
         const snapshot = await db.ref('apps').once('value');
@@ -94,21 +108,10 @@ async function loadApps() {
             apps.push({
                 id: child.key,
                 ...app,
-                // Ensure required fields
                 name: app.name || "Unnamed App",
                 version: app.version || "v1.0.0",
-                description: app.description || "No description available",
-                category: app.category || "general",
-                features: app.features || [],
-                downloadUrl: app.downloadUrl || "#",
-                icon: app.icon || "fas fa-mobile-alt",
-                color: app.color || "#00A884",
-                size: app.size || "N/A",
-                timestamp: app.timestamp || Date.now(),
-                isNew: app.isNew || false,
-                isPopular: app.isPopular || false,
-                isUpdated: app.isUpdated || false,
-                downloads: app.downloads || 0
+                description: app.description || "No description",
+                downloadUrl: app.downloadUrl || "#"
             });
         });
         
@@ -118,11 +121,10 @@ async function loadApps() {
         
     } catch (error) {
         console.error("Error loading apps:", error);
-        showError("Failed to load apps. Please try again.");
+        showDemoApps();
     }
 }
 
-// Display apps in grid
 function displayApps(apps) {
     const grid = document.getElementById('appsGrid');
     
@@ -139,71 +141,17 @@ function displayApps(apps) {
     
     let html = '';
     apps.forEach(app => {
-        // Format date
-        const date = new Date(app.timestamp);
-        const formattedDate = date.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-        });
-        
-        // Get badges
-        const badges = [];
-        if (app.isNew) badges.push('NEW');
-        if (app.isPopular) badges.push('POPULAR');
-        if (app.isUpdated) badges.push('UPDATED');
-        
         html += `
-        <div class="app-card" data-category="${app.category}" data-search="${app.name.toLowerCase()} ${app.description.toLowerCase()} ${app.features.join(' ').toLowerCase()}">
-            <div class="app-header">
-                <div class="app-icon" style="background: ${app.color};">
-                    <i class="${app.icon}"></i>
-                </div>
-                ${badges.length > 0 ? `
-                <div class="app-badges">
-                    ${badges.map(badge => `<span class="app-badge ${badge.toLowerCase()}">${badge}</span>`).join('')}
-                </div>
-                ` : ''}
+        <div class="app-card">
+            <div class="app-icon" style="background: ${app.color || '#00A884'};">
+                <i class="${app.icon || 'fas fa-mobile-alt'}"></i>
             </div>
-            <div class="app-content">
-                <h3 class="app-title">${app.name}</h3>
-                <div class="app-meta">
-                    <span class="app-version"><i class="fas fa-code-branch"></i> ${app.version}</span>
-                    <span class="app-category"><i class="fas fa-tag"></i> ${app.category}</span>
-                </div>
-                <p class="app-description">${app.description}</p>
-                
-                <div class="app-features">
-                    <h4><i class="fas fa-star"></i> Features:</h4>
-                    <ul>
-                        ${app.features.slice(0, 3).map(feature => 
-                            `<li><i class="fas fa-check"></i> ${feature}</li>`
-                        ).join('')}
-                        ${app.features.length > 3 ? 
-                            `<li class="more-features">+${app.features.length - 3} more features</li>` : ''
-                        }
-                    </ul>
-                </div>
-            </div>
-            <div class="app-footer">
-                <div class="app-stats">
-                    <span class="stat">
-                        <i class="fas fa-download"></i>
-                        <span>${formatNumber(app.downloads)}</span>
-                    </span>
-                    <span class="stat">
-                        <i class="far fa-calendar"></i>
-                        <span>${formattedDate}</span>
-                    </span>
-                    <span class="stat">
-                        <i class="fas fa-hdd"></i>
-                        <span>${app.size}</span>
-                    </span>
-                </div>
-                <a href="${app.downloadUrl}" class="download-btn" target="_blank" rel="noopener noreferrer">
-                    <i class="fas fa-download"></i> Download APK
-                </a>
-            </div>
+            <h3 class="app-title">${app.name}</h3>
+            <div class="app-version">${app.version}</div>
+            <p class="app-description">${app.description}</p>
+            <a href="${app.downloadUrl}" class="download-btn" target="_blank" rel="noopener noreferrer">
+                <i class="fas fa-download"></i> Download APK
+            </a>
         </div>
         `;
     });
@@ -211,32 +159,28 @@ function displayApps(apps) {
     grid.innerHTML = html;
 }
 
-// Load updates from Firebase
+// Load updates
 async function loadUpdates() {
     try {
-        const snapshot = await db.ref('updates').orderByChild('timestamp').limitToLast(20).once('value');
+        const snapshot = await db.ref('updates').orderByChild('timestamp').limitToLast(10).once('value');
         const updates = [];
         
         snapshot.forEach(child => {
-            const update = child.val();
             updates.push({
                 id: child.key,
-                ...update,
-                timestamp: update.timestamp || Date.now(),
-                isCritical: update.isCritical || false
+                ...child.val()
             });
         });
         
-        allUpdates = updates.reverse(); // Newest first
+        allUpdates = updates.reverse();
         updateUpdatesDrawer(updates);
-        updateUpdateStats(updates);
         
     } catch (error) {
         console.error("Error loading updates:", error);
+        showDemoUpdates();
     }
 }
 
-// Update updates drawer
 function updateUpdatesDrawer(updates) {
     const drawerContent = document.getElementById('drawerContent');
     const updateCount = document.getElementById('updateCount');
@@ -253,44 +197,18 @@ function updateUpdatesDrawer(updates) {
         return;
     }
     
-    // Count critical updates for badge
-    const criticalCount = updates.filter(u => u.isCritical).length;
-    updateCount.textContent = criticalCount > 0 ? criticalCount : updates.length;
-    if (criticalCount > 0) {
-        updateCount.classList.add('critical');
-    }
+    updateCount.textContent = updates.length;
     
     let html = '';
     updates.forEach(update => {
-        const date = new Date(update.timestamp);
-        const formattedDate = date.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric'
-        }) + ' ' + date.toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        const date = new Date(update.timestamp || Date.now()).toLocaleDateString();
         
         html += `
-        <div class="update-item ${update.isCritical ? 'critical' : ''}">
-            <div class="update-header">
-                <h4>${update.appName || 'App Update'}</h4>
-                <span class="update-version">${update.version || 'v1.0.0'}</span>
-            </div>
-            <div class="update-meta">
-                <span class="update-date"><i class="far fa-clock"></i> ${formattedDate}</span>
-                ${update.isCritical ? '<span class="critical-tag"><i class="fas fa-exclamation-triangle"></i> Critical</span>' : ''}
-            </div>
-            <p class="update-description">${update.message || 'Bug fixes and improvements'}</p>
-            ${update.changes ? `
-            <div class="update-changes">
-                <h5><i class="fas fa-list"></i> Changes:</h5>
-                <ul>
-                    ${update.changes.map(change => `<li><i class="fas fa-check"></i> ${change}</li>`).join('')}
-                </ul>
-            </div>
-            ` : ''}
+        <div class="update-item">
+            <h4>${update.appName || 'App Update'}</h4>
+            <div class="update-version">${update.version || 'v1.0.0'}</div>
+            <div class="update-date">${date}</div>
+            <p>${update.message || 'Bug fixes and improvements'}</p>
         </div>
         `;
     });
@@ -298,88 +216,141 @@ function updateUpdatesDrawer(updates) {
     drawerContent.innerHTML = html;
 }
 
-// Load stats from Firebase
+// Load stats
 async function loadStats() {
     try {
         const snapshot = await db.ref('website/stats').once('value');
         const stats = snapshot.val() || {};
         
-        // Update stats display
         document.getElementById('totalAppsCount').textContent = stats.totalApps || allApps.length;
         document.getElementById('totalDownloads').textContent = formatNumber(stats.totalDownloads || 0);
         document.getElementById('activeUsers').textContent = formatNumber(stats.activeUsers || 0);
         document.getElementById('latestVersion').textContent = stats.latestVersion || 'v1.0.0';
         document.getElementById('totalUpdates').textContent = stats.totalUpdates || allUpdates.length;
-        document.getElementById('verifiedApps').textContent = stats.verifiedApps || 'All';
-        
-        // Calculate last update date
-        if (allUpdates.length > 0) {
-            const latestUpdate = allUpdates[0];
-            const date = new Date(latestUpdate.timestamp);
-            const now = new Date();
-            const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
-            
-            let lastUpdateText;
-            if (diffDays === 0) lastUpdateText = 'Today';
-            else if (diffDays === 1) lastUpdateText = 'Yesterday';
-            else if (diffDays < 7) lastUpdateText = `${diffDays} days ago`;
-            else if (diffDays < 30) lastUpdateText = `${Math.floor(diffDays/7)} weeks ago`;
-            else lastUpdateText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            
-            document.getElementById('lastUpdate').textContent = lastUpdateText;
-        }
         
     } catch (error) {
         console.error("Error loading stats:", error);
+        showDemoStats();
     }
 }
 
-// Update app-specific stats
 function updateAppStats(apps) {
-    // Update total apps count
     document.getElementById('totalAppsCount').textContent = apps.length;
-    
-    // Calculate total downloads
     const totalDownloads = apps.reduce((sum, app) => sum + (app.downloads || 0), 0);
     document.getElementById('totalDownloads').textContent = formatNumber(totalDownloads);
 }
 
-// Update update-specific stats
-function updateUpdateStats(updates) {
-    document.getElementById('totalUpdates').textContent = updates.length;
-}
-
-// Format large numbers
 function formatNumber(num) {
-    if (num >= 1000000) {
-        return (num / 1000000).toFixed(1) + 'M';
-    } else if (num >= 1000) {
-        return (num / 1000).toFixed(1) + 'K';
-    }
-    return num.toString();
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    return num;
 }
 
-// Search and filter functionality
+// Demo data for when Firebase is not available
+function showDemoData() {
+    console.log("Showing demo data");
+    
+    // Demo config
+    siteConfig = getDefaultConfig();
+    updatePageWithConfig();
+    
+    // Demo apps
+    showDemoApps();
+    
+    // Demo updates
+    showDemoUpdates();
+    
+    // Demo stats
+    showDemoStats();
+    
+    // Hide loading screen
+    document.getElementById('loadingScreen').style.display = 'none';
+    initializeEventListeners();
+}
+
+function showDemoApps() {
+    const demoApps = [
+        {
+            name: "Cyber Links Pro",
+            version: "v2.5.0",
+            description: "Premium security and connectivity app",
+            downloadUrl: "#",
+            color: "#00A884",
+            icon: "fas fa-shield-alt",
+            downloads: 2500
+        },
+        {
+            name: "Video Downloader",
+            version: "v1.8.2",
+            description: "Download videos from all platforms",
+            downloadUrl: "#",
+            color: "#FF4444",
+            icon: "fas fa-video",
+            downloads: 1800
+        },
+        {
+            name: "Music Stream Pro",
+            version: "v3.1.0",
+            description: "Premium music streaming app",
+            downloadUrl: "#",
+            color: "#2196F3",
+            icon: "fas fa-music",
+            downloads: 3200
+        }
+    ];
+    
+    allApps = demoApps;
+    displayApps(demoApps);
+    updateAppStats(demoApps);
+}
+
+function showDemoUpdates() {
+    const demoUpdates = [
+        {
+            appName: "Cyber Links Pro",
+            version: "v2.5.0",
+            message: "Added new features and security improvements",
+            timestamp: Date.now() - 2 * 24 * 60 * 60 * 1000 // 2 days ago
+        },
+        {
+            appName: "Video Downloader",
+            version: "v1.8.2",
+            message: "Fixed download issues and added new platforms",
+            timestamp: Date.now() - 7 * 24 * 60 * 60 * 1000 // 1 week ago
+        }
+    ];
+    
+    allUpdates = demoUpdates;
+    updateUpdatesDrawer(demoUpdates);
+}
+
+function showDemoStats() {
+    document.getElementById('totalAppsCount').textContent = allApps.length;
+    document.getElementById('totalDownloads').textContent = formatNumber(
+        allApps.reduce((sum, app) => sum + (app.downloads || 1000), 0)
+    );
+    document.getElementById('activeUsers').textContent = "5K+";
+    document.getElementById('latestVersion').textContent = "v2.5.0";
+    document.getElementById('totalUpdates').textContent = allUpdates.length;
+    document.getElementById('lastUpdate').textContent = "Today";
+    document.getElementById('verifiedApps').textContent = "All";
+}
+
+// Event listeners
 function initializeEventListeners() {
-    // Search input
+    // Search
     const searchInput = document.getElementById('appSearch');
     searchInput.addEventListener('input', function() {
-        const searchTerm = this.value.toLowerCase();
-        filterApps(searchTerm);
+        const term = this.value.toLowerCase();
+        filterApps(term);
     });
     
     // Filter buttons
-    document.querySelectorAll('.filter-btn').forEach(button => {
-        button.addEventListener('click', function() {
-            // Update active button
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
             this.classList.add('active');
-            
-            // Filter apps
-            const filter = this.dataset.filter;
-            applyFilter(filter);
+            applyFilter(this.dataset.filter);
         });
     });
     
@@ -388,43 +359,22 @@ function initializeEventListeners() {
     
     // Mobile menu
     document.querySelector('.mobile-menu-btn').addEventListener('click', function() {
-        const navMenu = document.querySelector('.nav-menu');
-        navMenu.classList.toggle('active');
+        document.querySelector('.nav-menu').classList.toggle('active');
     });
 }
 
-// Filter apps based on search term
-function filterApps(searchTerm) {
-    const appCards = document.querySelectorAll('.app-card');
-    
-    appCards.forEach(card => {
-        const searchData = card.dataset.search;
-        if (searchData.includes(searchTerm)) {
-            card.style.display = 'block';
-        } else {
-            card.style.display = 'none';
-        }
+function filterApps(term) {
+    const cards = document.querySelectorAll('.app-card');
+    cards.forEach(card => {
+        const text = card.textContent.toLowerCase();
+        card.style.display = text.includes(term) ? 'block' : 'none';
     });
 }
 
-// Apply filter to apps
 function applyFilter(filter) {
-    const appCards = document.querySelectorAll('.app-card');
-    
-    appCards.forEach(card => {
-        switch(filter) {
-            case 'new':
-                card.style.display = card.dataset.search.includes('new') ? 'block' : 'none';
-                break;
-            case 'popular':
-                card.style.display = card.dataset.search.includes('popular') ? 'block' : 'none';
-                break;
-            case 'updated':
-                card.style.display = card.dataset.search.includes('updated') ? 'block' : 'none';
-                break;
-            default: // 'all'
-                card.style.display = 'block';
-        }
+    const cards = document.querySelectorAll('.app-card');
+    cards.forEach(card => {
+        card.style.display = 'block'; // Reset
     });
 }
 
@@ -439,44 +389,25 @@ function closeDrawer() {
     document.getElementById('updatesDrawer').classList.remove('active');
 }
 
-// Show error message
-function showError(message) {
-    const loadingScreen = document.getElementById('loadingScreen');
-    loadingScreen.innerHTML = `
-        <div class="loading-content error">
-            <i class="fas fa-exclamation-triangle"></i>
-            <h3>Error</h3>
-            <p>${message}</p>
-            <button onclick="location.reload()" class="btn btn-primary">
-                <i class="fas fa-redo"></i> Retry
-            </button>
-        </div>
-    `;
-}
-
-// Update last sync time
-function updateLastSync() {
-    const now = new Date();
-    const timeString = now.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-    document.getElementById('lastSync').textContent = timeString;
-}
-
-// Initialize when page loads
+// Initialize
 document.addEventListener('DOMContentLoaded', function() {
     initializeFirebase();
     
-    // Update sync time every minute
-    setInterval(updateLastSync, 60000);
-    updateLastSync();
-    
-    // Close drawer when clicking outside
+    // Close drawer on overlay click
     document.getElementById('drawerOverlay').addEventListener('click', closeDrawer);
     
-    // Close drawer with ESC key
+    // Close drawer with ESC
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') closeDrawer();
     });
+    
+    // Update sync time
+    setInterval(() => {
+        const now = new Date();
+        document.getElementById('lastSync').textContent = 
+            now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }, 60000);
+    
+    // Initial sync time
+    document.getElementById('lastSync').textContent = "Just now";
 });
