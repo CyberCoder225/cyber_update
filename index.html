@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Apps Collection - All Apps in One Place</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loadingScreen" class="loading-screen">
+        <div class="loading-content">
+            <i class="fas fa-spinner fa-spin"></i>
+            <h3>Loading Apps...</h3>
+            <p>Fetching latest data from server</p>
+        </div>
+    </div>
+
+    <!-- Floating Updates Button -->
+    <button class="floating-btn" id="updatesBtn">
+        <i class="fas fa-history"></i>
+        <span class="btn-badge" id="updateCount">0</span>
+    </button>
+
+    <!-- Updates Drawer -->
+    <div class="drawer-overlay" id="drawerOverlay"></div>
+    <div class="drawer" id="updatesDrawer">
+        <div class="drawer-header">
+            <h2><i class="fas fa-sync-alt"></i> Latest Updates</h2>
+            <button class="close-drawer" onclick="closeDrawer()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="drawer-content" id="drawerContent">
+            <!-- Dynamic content will be loaded here -->
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="index.html" class="logo">
+                <i class="fas fa-box-open"></i>
+                <span id="siteTitle">App Store</span>
+            </a>
+            <div class="nav-menu">
+                <a href="index.html" class="active"><i class="fas fa-home"></i> Home</a>
+                <a href="#apps"><i class="fas fa-mobile-alt"></i> Apps</a>
+                <a href="#" id="telegramLink"><i class="fab fa-telegram"></i> Channel</a>
+                <a href="#" onclick="openDrawer()"><i class="fas fa-history"></i> Updates</a>
+            </div>
+            <button class="mobile-menu-btn">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text">
+                    <h1 id="heroTitle">Welcome to <span class="highlight">App Collection</span></h1>
+                    <p id="heroSubtitle" class="hero-subtitle">Loading description...</p>
+                    <div class="hero-stats">
+                        <div class="stat">
+                            <i class="fas fa-mobile-alt"></i>
+                            <div>
+                                <h3 id="totalAppsCount">0</h3>
+                                <p>Total Apps</p>
+                            </div>
+                        </div>
+                        <div class="stat">
+                            <i class="fas fa-download"></i>
+                            <div>
+                                <h3 id="totalDownloads">0</h3>
+                                <p>Downloads</p>
+                            </div>
+                        </div>
+                        <div class="stat">
+                            <i class="fas fa-user-friends"></i>
+                            <div>
+                                <h3 id="activeUsers">0</h3>
+                                <p>Active Users</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="hero-image">
+                    <img src="https://cdn.dribbble.com/users/318483/screenshots/1478298/app-showcase.png" alt="App Preview" class="app-preview">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Apps Section -->
+    <section class="apps-section" id="apps">
+        <div class="container">
+            <div class="section-header">
+                <h2><i class="fas fa-th-large"></i> All <span class="highlight">Apps</span></h2>
+                <p id="appsDescription">Browse through all available applications</p>
+            </div>
+            
+            <!-- Filter/Search -->
+            <div class="search-container">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="appSearch" placeholder="Search apps by name, category, or features...">
+                </div>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" data-filter="all">All Apps</button>
+                    <button class="filter-btn" data-filter="new">New</button>
+                    <button class="filter-btn" data-filter="popular">Popular</button>
+                    <button class="filter-btn" data-filter="updated">Recently Updated</button>
+                </div>
+            </div>
+
+            <!-- Apps Grid -->
+            <div class="apps-grid" id="appsGrid">
+                <!-- Apps will be loaded dynamically from Firebase -->
+                <div class="loading-apps">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>Loading apps...</p>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="stats-section">
+                <h3><i class="fas fa-chart-bar"></i> Collection Statistics</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-code"></i>
+                        </div>
+                        <h4 id="latestVersion">v1.0.0</h4>
+                        <p>Latest Version</p>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-calendar"></i>
+                        </div>
+                        <h4 id="lastUpdate">Today</h4>
+                        <p>Last Update</p>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <h4 id="totalUpdates">0</h4>
+                        <p>Total Updates</p>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <h4 id="verifiedApps">0</h4>
+                        <p>Verified Apps</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-grid" id="footerContent">
+                <!-- Dynamic footer content -->
+            </div>
+            <div class="footer-bottom">
+                <p id="copyrightText">&copy; 2024 App Collection. All rights reserved.</p>
+                <p>Data loaded from <strong>Firebase</strong> | Last sync: <span id="lastSync">Just now</span></p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Main Script -->
+    <script src="app.js"></script>
+</body>
+</html>
