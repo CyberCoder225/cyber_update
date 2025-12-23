@@ -8,7 +8,7 @@ const firebaseConfig = {
     projectId: "ny-bmw-wt-project2024",
     storageBucket: "ny-bmw-wt-project2024.appspot.com",
     messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    appId: "ny-bmw-wt-project2024"
 };
 
 // Global State
