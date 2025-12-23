@@ -1,73 +1,79 @@
-// app.js - Load Firebase config from environment variables
+// app.js - Optimized Firebase Loader
 
-// Firebase configuration from environment variables
 const firebaseConfig = {
-    apiKey: import.meta.env?.VITE_FIREBASE_API_KEY || process.env?.VITE_FIREBASE_API_KEY || "",
-    authDomain: import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN || process.env?.VITE_FIREBASE_AUTH_DOMAIN || "",
-    databaseURL: import.meta.env?.VITE_FIREBASE_DATABASE_URL || process.env?.VITE_FIREBASE_DATABASE_URL || "",
-    projectId: import.meta.env?.VITE_FIREBASE_PROJECT_ID || process.env?.VITE_FIREBASE_PROJECT_ID || "",
-    storageBucket: import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET || process.env?.VITE_FIREBASE_STORAGE_BUCKET || "",
-    messagingSenderId: import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
-    appId: import.meta.env?.VITE_FIREBASE_APP_ID || process.env?.VITE_FIREBASE_APP_ID || ""
+    apiKey: import.meta.env?.VITE_FIREBASE_API_KEY || "",
+    authDomain: import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN || "",
+    databaseURL: import.meta.env?.VITE_FIREBASE_DATABASE_URL || "",
+    projectId: import.meta.env?.VITE_FIREBASE_PROJECT_ID || "",
+    storageBucket: import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET || "",
+    messagingSenderId: import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+    appId: import.meta.env?.VITE_FIREBASE_APP_ID || ""
 };
 
-// Check if Firebase config is valid
-function isFirebaseConfigValid(config) {
-    return config.apiKey && 
-           config.projectId && 
-           config.databaseURL &&
-           config.apiKey !== "YOUR_API_KEY_HERE";
-}
-
-// Initialize Firebase
+// State
 let db;
 let siteConfig = {};
 let allApps = [];
 let allUpdates = [];
 
+// Helper to hide loader
+function hideLoadingScreen() {
+    const loader = document.getElementById('loadingScreen');
+    if (loader) loader.style.display = 'none';
+}
+
+// 1. IMPROVED: Validation check
+function isFirebaseConfigValid(config) {
+    return config.apiKey && config.apiKey.length > 10 && config.projectId;
+}
+
+// 2. IMPROVED: Initialize with a safety timeout
 async function initializeFirebase() {
-    try {
-        // Check if config is valid
-        if (!isFirebaseConfigValid(firebaseConfig)) {
-            console.warn("Firebase config not found. Using demo mode.");
+    // Safety Net: If nothing happens in 5 seconds, show demo data anyway
+    const safetyTimeout = setTimeout(() => {
+        if (!db) {
+            console.warn("Firebase taking too long... switching to demo mode.");
             showDemoData();
-            return;
+        }
+    }, 5000);
+
+    try {
+        if (!isFirebaseConfigValid(firebaseConfig)) {
+            throw new Error("Invalid Config");
         }
 
         // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
         db = firebase.database();
-        
-        console.log("Firebase initialized successfully");
-        
-        // Load all data
+
+        // Load data with error catching for each
         await Promise.all([
-            loadSiteConfig(),
-            loadApps(),
-            loadUpdates(),
-            loadStats()
+            loadSiteConfig().catch(e => console.error("Config failed", e)),
+            loadApps().catch(e => console.error("Apps failed", e)),
+            loadUpdates().catch(e => console.error("Updates failed", e)),
+            loadStats().catch(e => console.error("Stats failed", e))
         ]);
-        
-        // Hide loading screen
-        document.getElementById('loadingScreen').style.display = 'none';
-        
-        // Initialize event listeners
+
+        clearTimeout(safetyTimeout);
+        hideLoadingScreen();
         initializeEventListeners();
-        
+
     } catch (error) {
-        console.error("Firebase initialization failed:", error);
+        console.error("Initialization error:", error);
+        clearTimeout(safetyTimeout);
         showDemoData();
     }
 }
 
-// Load site configuration
+// 3. IMPROVED: Site Config Loader
 async function loadSiteConfig() {
     try {
         const snapshot = await db.ref('website/config').once('value');
         siteConfig = snapshot.val() || getDefaultConfig();
         updatePageWithConfig();
     } catch (error) {
-        console.error("Error loading config:", error);
         siteConfig = getDefaultConfig();
         updatePageWithConfig();
     }
@@ -76,309 +82,126 @@ async function loadSiteConfig() {
 function getDefaultConfig() {
     return {
         title: "App Collection",
-        description: "All my premium apps in one place",
+        description: "Premium Android applications",
         heroTitle: "Welcome to <span class='highlight'>App Collection</span>",
-        telegram: "https://t.me/yourchannel",
+        telegram: "#",
         copyright: "© 2024 App Collection"
     };
 }
 
 function updatePageWithConfig() {
     document.title = siteConfig.title;
-    document.getElementById('siteTitle').textContent = siteConfig.title;
-    document.getElementById('heroTitle').innerHTML = siteConfig.heroTitle;
-    document.getElementById('heroSubtitle').textContent = siteConfig.description;
-    document.getElementById('copyrightText').textContent = siteConfig.copyright;
-    
-    const telegramLink = document.getElementById('telegramLink');
-    if (siteConfig.telegram) {
-        telegramLink.href = siteConfig.telegram;
-        telegramLink.target = "_blank";
-    }
+    if(document.getElementById('siteTitle')) document.getElementById('siteTitle').textContent = siteConfig.title;
+    if(document.getElementById('heroTitle')) document.getElementById('heroTitle').innerHTML = siteConfig.heroTitle;
+    if(document.getElementById('heroSubtitle')) document.getElementById('heroSubtitle').textContent = siteConfig.description;
+    if(document.getElementById('copyrightText')) document.getElementById('copyrightText').textContent = siteConfig.copyright;
 }
 
-// Load apps from Firebase
+// 4. IMPROVED: App Loader
 async function loadApps() {
-    try {
-        const snapshot = await db.ref('apps').once('value');
-        const apps = [];
-        
-        snapshot.forEach(child => {
-            const app = child.val();
-            apps.push({
-                id: child.key,
-                ...app,
-                name: app.name || "Unnamed App",
-                version: app.version || "v1.0.0",
-                description: app.description || "No description",
-                downloadUrl: app.downloadUrl || "#"
-            });
-        });
-        
-        allApps = apps;
-        displayApps(apps);
-        updateAppStats(apps);
-        
-    } catch (error) {
-        console.error("Error loading apps:", error);
-        showDemoApps();
-    }
+    const snapshot = await db.ref('apps').once('value');
+    const apps = [];
+    snapshot.forEach(child => {
+        apps.push({ id: child.key, ...child.val() });
+    });
+    allApps = apps;
+    displayApps(apps);
 }
 
 function displayApps(apps) {
     const grid = document.getElementById('appsGrid');
-    
-    if (apps.length === 0) {
-        grid.innerHTML = `
-            <div class="no-apps">
-                <i class="fas fa-box-open"></i>
-                <h3>No Apps Available</h3>
-                <p>Check back later for new apps</p>
-            </div>
-        `;
+    if (!grid) return;
+
+    if (!apps || apps.length === 0) {
+        grid.innerHTML = `<div class="no-apps"><h3>No Apps Found</h3></div>`;
         return;
     }
-    
-    let html = '';
-    apps.forEach(app => {
-        html += `
+
+    grid.innerHTML = apps.map(app => `
         <div class="app-card">
             <div class="app-icon" style="background: ${app.color || '#00A884'};">
                 <i class="${app.icon || 'fas fa-mobile-alt'}"></i>
             </div>
             <h3 class="app-title">${app.name}</h3>
-            <div class="app-version">${app.version}</div>
-            <p class="app-description">${app.description}</p>
-            <a href="${app.downloadUrl}" class="download-btn" target="_blank" rel="noopener noreferrer">
+            <div class="app-version">${app.version || 'v1.0'}</div>
+            <p class="app-description">${app.description || ''}</p>
+            <a href="${app.downloadUrl || '#'}" class="download-btn" target="_blank">
                 <i class="fas fa-download"></i> Download APK
             </a>
         </div>
-        `;
-    });
-    
-    grid.innerHTML = html;
+    `).join('');
 }
 
-// Load updates
+// 5. Drawer & Updates
 async function loadUpdates() {
-    try {
-        const snapshot = await db.ref('updates').orderByChild('timestamp').limitToLast(10).once('value');
-        const updates = [];
-        
-        snapshot.forEach(child => {
-            updates.push({
-                id: child.key,
-                ...child.val()
-            });
-        });
-        
-        allUpdates = updates.reverse();
-        updateUpdatesDrawer(updates);
-        
-    } catch (error) {
-        console.error("Error loading updates:", error);
-        showDemoUpdates();
-    }
+    const snapshot = await db.ref('updates').limitToLast(10).once('value');
+    const updates = [];
+    snapshot.forEach(child => { updates.push(child.val()); });
+    allUpdates = updates.reverse();
+    updateUpdatesDrawer(allUpdates);
 }
 
 function updateUpdatesDrawer(updates) {
-    const drawerContent = document.getElementById('drawerContent');
-    const updateCount = document.getElementById('updateCount');
-    
-    if (updates.length === 0) {
-        drawerContent.innerHTML = `
-            <div class="no-updates">
-                <i class="fas fa-inbox"></i>
-                <h4>No Updates Yet</h4>
-                <p>Check back later for new updates</p>
-            </div>
-        `;
-        updateCount.textContent = '0';
-        return;
-    }
-    
-    updateCount.textContent = updates.length;
-    
-    let html = '';
-    updates.forEach(update => {
-        const date = new Date(update.timestamp || Date.now()).toLocaleDateString();
-        
-        html += `
+    const drawer = document.getElementById('drawerContent');
+    const count = document.getElementById('updateCount');
+    if (count) count.textContent = updates.length;
+    if (!drawer) return;
+
+    drawer.innerHTML = updates.map(u => `
         <div class="update-item">
-            <h4>${update.appName || 'App Update'}</h4>
-            <div class="update-version">${update.version || 'v1.0.0'}</div>
-            <div class="update-date">${date}</div>
-            <p>${update.message || 'Bug fixes and improvements'}</p>
+            <h4>${u.appName}</h4>
+            <div class="update-version">${u.version}</div>
+            <p>${u.message}</p>
         </div>
-        `;
-    });
-    
-    drawerContent.innerHTML = html;
+    `).join('');
 }
 
-// Load stats
 async function loadStats() {
-    try {
-        const snapshot = await db.ref('website/stats').once('value');
-        const stats = snapshot.val() || {};
-        
-        document.getElementById('totalAppsCount').textContent = stats.totalApps || allApps.length;
-        document.getElementById('totalDownloads').textContent = formatNumber(stats.totalDownloads || 0);
-        document.getElementById('activeUsers').textContent = formatNumber(stats.activeUsers || 0);
-        document.getElementById('latestVersion').textContent = stats.latestVersion || 'v1.0.0';
-        document.getElementById('totalUpdates').textContent = stats.totalUpdates || allUpdates.length;
-        
-    } catch (error) {
-        console.error("Error loading stats:", error);
-        showDemoStats();
+    const snapshot = await db.ref('website/stats').once('value');
+    const stats = snapshot.val() || {};
+    if(document.getElementById('totalAppsCount')) document.getElementById('totalAppsCount').textContent = stats.totalApps || 0;
+    if(document.getElementById('totalDownloads')) document.getElementById('totalDownloads').textContent = stats.totalDownloads || 0;
+}
+
+// Event Listeners
+function initializeEventListeners() {
+    const searchInput = document.getElementById('appSearch');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            const cards = document.querySelectorAll('.app-card');
+            cards.forEach(card => {
+                const isMatch = card.textContent.toLowerCase().includes(term);
+                card.style.display = isMatch ? 'block' : 'none';
+            });
+        });
+    }
+
+    const updatesBtn = document.getElementById('updatesBtn');
+    if (updatesBtn) updatesBtn.addEventListener('click', openDrawer);
+    
+    const mobileBtn = document.querySelector('.mobile-menu-btn');
+    if (mobileBtn) {
+        mobileBtn.addEventListener('click', () => {
+            document.querySelector('.nav-menu').classList.toggle('active');
+        });
     }
 }
 
-function updateAppStats(apps) {
-    document.getElementById('totalAppsCount').textContent = apps.length;
-    const totalDownloads = apps.reduce((sum, app) => sum + (app.downloads || 0), 0);
-    document.getElementById('totalDownloads').textContent = formatNumber(totalDownloads);
-}
-
-function formatNumber(num) {
-    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-    return num;
-}
-
-// Demo data for when Firebase is not available
+// Demo Data Fallback
 function showDemoData() {
-    console.log("Showing demo data");
-    
-    // Demo config
     siteConfig = getDefaultConfig();
     updatePageWithConfig();
     
-    // Demo apps
-    showDemoApps();
+    allApps = [
+        { name: "Demo App 1", version: "v1.0", description: "Demo description", color: "#2196F3", icon: "fas fa-star" }
+    ];
+    displayApps(allApps);
     
-    // Demo updates
-    showDemoUpdates();
-    
-    // Demo stats
-    showDemoStats();
-    
-    // Hide loading screen
-    document.getElementById('loadingScreen').style.display = 'none';
+    hideLoadingScreen();
     initializeEventListeners();
 }
 
-function showDemoApps() {
-    const demoApps = [
-        {
-            name: "Cyber Links Pro",
-            version: "v2.5.0",
-            description: "Premium security and connectivity app",
-            downloadUrl: "#",
-            color: "#00A884",
-            icon: "fas fa-shield-alt",
-            downloads: 2500
-        },
-        {
-            name: "Video Downloader",
-            version: "v1.8.2",
-            description: "Download videos from all platforms",
-            downloadUrl: "#",
-            color: "#FF4444",
-            icon: "fas fa-video",
-            downloads: 1800
-        },
-        {
-            name: "Music Stream Pro",
-            version: "v3.1.0",
-            description: "Premium music streaming app",
-            downloadUrl: "#",
-            color: "#2196F3",
-            icon: "fas fa-music",
-            downloads: 3200
-        }
-    ];
-    
-    allApps = demoApps;
-    displayApps(demoApps);
-    updateAppStats(demoApps);
-}
-
-function showDemoUpdates() {
-    const demoUpdates = [
-        {
-            appName: "Cyber Links Pro",
-            version: "v2.5.0",
-            message: "Added new features and security improvements",
-            timestamp: Date.now() - 2 * 24 * 60 * 60 * 1000 // 2 days ago
-        },
-        {
-            appName: "Video Downloader",
-            version: "v1.8.2",
-            message: "Fixed download issues and added new platforms",
-            timestamp: Date.now() - 7 * 24 * 60 * 60 * 1000 // 1 week ago
-        }
-    ];
-    
-    allUpdates = demoUpdates;
-    updateUpdatesDrawer(demoUpdates);
-}
-
-function showDemoStats() {
-    document.getElementById('totalAppsCount').textContent = allApps.length;
-    document.getElementById('totalDownloads').textContent = formatNumber(
-        allApps.reduce((sum, app) => sum + (app.downloads || 1000), 0)
-    );
-    document.getElementById('activeUsers').textContent = "5K+";
-    document.getElementById('latestVersion').textContent = "v2.5.0";
-    document.getElementById('totalUpdates').textContent = allUpdates.length;
-    document.getElementById('lastUpdate').textContent = "Today";
-    document.getElementById('verifiedApps').textContent = "All";
-}
-
-// Event listeners
-function initializeEventListeners() {
-    // Search
-    const searchInput = document.getElementById('appSearch');
-    searchInput.addEventListener('input', function() {
-        const term = this.value.toLowerCase();
-        filterApps(term);
-    });
-    
-    // Filter buttons
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
-            applyFilter(this.dataset.filter);
-        });
-    });
-    
-    // Updates button
-    document.getElementById('updatesBtn').addEventListener('click', openDrawer);
-    
-    // Mobile menu
-    document.querySelector('.mobile-menu-btn').addEventListener('click', function() {
-        document.querySelector('.nav-menu').classList.toggle('active');
-    });
-}
-
-function filterApps(term) {
-    const cards = document.querySelectorAll('.app-card');
-    cards.forEach(card => {
-        const text = card.textContent.toLowerCase();
-        card.style.display = text.includes(term) ? 'block' : 'none';
-    });
-}
-
-function applyFilter(filter) {
-    const cards = document.querySelectorAll('.app-card');
-    cards.forEach(card => {
-        card.style.display = 'block'; // Reset
-    });
-}
-
-// Drawer functions
 function openDrawer() {
     document.getElementById('drawerOverlay').style.display = 'block';
     document.getElementById('updatesDrawer').classList.add('active');
@@ -389,25 +212,5 @@ function closeDrawer() {
     document.getElementById('updatesDrawer').classList.remove('active');
 }
 
-// Initialize
-document.addEventListener('DOMContentLoaded', function() {
-    initializeFirebase();
-    
-    // Close drawer on overlay click
-    document.getElementById('drawerOverlay').addEventListener('click', closeDrawer);
-    
-    // Close drawer with ESC
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') closeDrawer();
-    });
-    
-    // Update sync time
-    setInterval(() => {
-        const now = new Date();
-        document.getElementById('lastSync').textContent = 
-            now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }, 60000);
-    
-    // Initial sync time
-    document.getElementById('lastSync').textContent = "Just now";
-});
+// Boot
+document.addEventListener('DOMContentLoaded', initializeFirebase);
