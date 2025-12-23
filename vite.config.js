@@ -1,4 +1,4 @@
-// config.js
+// // config.js
 const SECRETS = {
     apiKey: "AIzaSyBv6zQwMj1K2Oaa1t-B0Rto21hDjzfBEFo",
     authDomain: "ny-bmw-wt-project2024.firebaseapp.com",
